@@ -82,49 +82,52 @@ struct TransferView: View {
     /// diffable layout `Form`-а пересчитывает все секции на каждое нажатие
     /// клавиши, и появляются заметные пролагивания.
     private var amountHero: some View {
-        VStack(spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(verbatim: "$")
-                    .foregroundStyle(.secondary)
-                TextField("0", text: $amountText)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.leading)
-                    .focused($focusedField, equals: .amount)
-                    .fixedSize()
-                    .onChange(of: amountText) { _, newValue in
-                        let reformatted = Self.formatAmount(newValue)
-                        if reformatted != amountText {
-                            amountText = reformatted
+        GlassEffectContainer(spacing: 12) {
+            VStack(spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(verbatim: "$")
+                        .foregroundStyle(.secondary)
+                    TextField("0", text: $amountText)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.leading)
+                        .focused($focusedField, equals: .amount)
+                        .fixedSize()
+                        .onChange(of: amountText) { _, newValue in
+                            let reformatted = Self.formatAmount(newValue)
+                            if reformatted != amountText {
+                                amountText = reformatted
+                            }
                         }
-                    }
-            }
-            .font(.system(size: 44, weight: .light, design: .monospaced))
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 16)
-            .contentShape(Rectangle())
-            .onTapGesture { focusedField = .amount }
+                }
+                .font(.system(.largeTitle, design: .monospaced).weight(.light))
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .contentShape(Rectangle())
+                .onTapGesture { focusedField = .amount }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Self.quickAmounts, id: \.self) { value in
-                        Button {
-                            amountText = (parsedAmount + value).formatted(.monopolyDigits)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Self.quickAmounts, id: \.self) { value in
+                            Button {
+                                amountText = (parsedAmount + value).formatted(.monopolyDigits)
+                            } label: {
+                                Text("+" + value.formatted(.monopolyMoney))
+                            }
+                            .buttonStyle(.glass)
+                        }
+                        Button(role: .destructive) {
+                            amountText = ""
                         } label: {
-                            Text("+" + value.formatted(.monopolyMoney))
+                            Image(systemName: "xmark.circle.fill")
+                                .accessibilityLabel("Очистить сумму")
                         }
                         .buttonStyle(.glass)
                     }
-                    Button(role: .destructive) {
-                        amountText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                    }
-                    .buttonStyle(.glass)
+                    .scrollTargetLayout()
                 }
-                .scrollTargetLayout()
+                .contentMargins(.horizontal, 16, for: .scrollContent)
+                .scrollClipDisabled()
             }
-            .contentMargins(.horizontal, 16, for: .scrollContent)
-            .scrollClipDisabled()
         }
         .padding(.vertical, 16)
         .background(Color(.systemGroupedBackground))
@@ -233,24 +236,4 @@ private struct PartyPicker: View {
     }
 }
 
-private extension Money {
-    /// Парсит свободно введённое пользователем число — оставляет только цифры
-    /// (запятые, пробелы, любые разделители тысяч игнорируются как форматирование).
-    /// В Монополии нет дробных сумм, поэтому десятичный разделитель тоже не нужен.
-    /// Argument label `parsing:` намеренно не совпадает с Foundation-овским
-    /// `Decimal(string:)` — иначе Money == Decimal и `Decimal(string: cleaned)`
-    /// внутри инициализатора уйдёт в бесконечную рекурсию.
-    init?(parsing input: String) {
-        let digits = input.filter(\.isNumber)
-        guard !digits.isEmpty, let value = Decimal(string: digits, locale: nil) else { return nil }
-        self = value
-    }
-
-    /// Целое представление без локального форматирования (для подстановки в TextField).
-    var plainString: String {
-        var value = self
-        var rounded = Decimal()
-        NSDecimalRound(&rounded, &value, 0, .plain)
-        return NSDecimalNumber(decimal: rounded).stringValue
-    }
-}
+// Money(parsing:) переехал в Domain/Money.swift — там его место, не здесь.

@@ -116,6 +116,33 @@ struct LedgerServiceTests {
         }
     }
 
+    @Test func addPlayer_extendsRosterAndSeedsOpeningTransaction() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 1500)
+
+        let charlie = try service.addPlayer(name: "C", colorHex: "#000000")
+
+        #expect(game.players.count == 3)
+        #expect(charlie.seatOrder == 2)
+        #expect(try service.balance(of: charlie) == 1500, "Новому игроку выдан стартовый баланс")
+    }
+
+    @Test func removePlayer_dropsRosterEntry_keepsHistoryReadable() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 100)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+        let bob = try #require(game.players.first(where: { $0.name == "B" }))
+
+        try service.record(amount: 50, kind: .transfer, from: alice, to: bob, note: nil)
+        try service.removePlayer(alice)
+
+        #expect(game.players.count == 1)
+        // Транзакция остаётся в журнале, имя денормализовано.
+        let txns = game.transactions.filter { $0.kind == .transfer }
+        #expect(txns.count == 1)
+        #expect(txns.first?.fromPlayerName == "A")
+    }
+
     @Test func endActiveGame_preservesHistory() async throws {
         let service = try Self.makeService()
         let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 100)
@@ -145,7 +172,7 @@ struct LedgerServiceTests {
         try service.record(amount: 50, kind: .rent, from: carol, to: alice, note: nil)
         try service.record(amount: 75, kind: .fee, from: bob, to: carol, note: nil)
 
-        let total = try players.reduce(Money.zero) { partial, player in
+        let total = try players.reduce(Decimal.zero) { partial, player in
             partial + (try service.balance(of: player))
         }
         let expected = Money(players.count) * game.startingBalance
@@ -200,9 +227,30 @@ struct TransferViewModelTests {
     }
 
     @Test func submit_failurePathReportsError() async throws {
-        let (vm, _, _) = try Self.setup()
-        // from == to == .bank → bankToBank
+        let (vm, players, _) = try Self.setup()
+        let alice = try #require(players.first)
+
+        // 1) Обе стороны — банк, ненулевая сумма → bankToBank.
+        vm.from = .bank
+        vm.to = .bank
+        vm.submit(amount: 100)
+        #expect(!vm.didSucceed)
+        #expect(vm.lastError == .bankToBank)
+
+        // 2) Перевод самому себе.
+        vm.clearError()
+        vm.from = .player(alice.id)
+        vm.to = .player(alice.id)
+        vm.submit(amount: 50)
+        #expect(!vm.didSucceed)
+        #expect(vm.lastError == .selfTransfer)
+
+        // 3) Нулевая сумма.
+        vm.clearError()
+        vm.from = .player(alice.id)
+        vm.to = .bank
         vm.submit(amount: 0)
         #expect(!vm.didSucceed)
+        #expect(vm.lastError == .nonPositiveAmount)
     }
 }

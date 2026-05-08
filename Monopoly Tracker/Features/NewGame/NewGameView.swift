@@ -26,7 +26,7 @@ struct NewGameView: View {
             ) { _ in
                 Button("OK", role: .cancel) { error = nil }
             } message: { error in
-                Text(error.errorDescription ?? "Неизвестная ошибка")
+                Text(error.errorDescription ?? String(localized: "Неизвестная ошибка"))
             }
         }
     }
@@ -34,8 +34,8 @@ struct NewGameView: View {
     private var balanceSection: some View {
         Section("Стартовый баланс") {
             HStack {
-                Text(startingBalance, format: .monopolyMoney)
-                    .font(.system(size: 24, weight: .light, design: .monospaced))
+                Text(startingBalance.formatted(.monopolyMoney))
+                    .font(.system(.title2, design: .monospaced).weight(.light))
                     .contentTransition(.numericText())
                 Spacer()
             }
@@ -43,7 +43,7 @@ struct NewGameView: View {
 
             Picker("Сумма", selection: $startingBalance) {
                 ForEach(Self.presets, id: \.self) { value in
-                    Text(value, format: .monopolyMoney).tag(value)
+                    Text(value.formatted(.monopolyMoney)).tag(value)
                 }
             }
             .pickerStyle(.segmented)
@@ -63,6 +63,7 @@ struct NewGameView: View {
                             removePlayer(at: index)
                         } label: {
                             Image(systemName: "minus.circle.fill")
+                                .accessibilityHidden(true)
                         }
                         .buttonStyle(.borderless)
                         .accessibilityLabel("Удалить игрока \(index + 1)")
@@ -84,7 +85,7 @@ struct NewGameView: View {
         Section {
             Button(action: start) {
                 Text("Начать игру")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 4)
             }
@@ -94,7 +95,7 @@ struct NewGameView: View {
         } footer: {
             if let hint = disabledReason {
                 Text(hint)
-                    .font(.system(size: 13))
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
@@ -143,7 +144,8 @@ struct NewGameView: View {
         } catch let ledgerError as LedgerError {
             error = ledgerError
         } catch {
-            self.error = .missingPlayer
+            self.error = nil
+            assertionFailure("Unknown error from LedgerService: \(error)")
         }
     }
 }
@@ -158,5 +160,6 @@ private struct PlayerColorSwatch: View {
             .overlay(
                 Circle().strokeBorder(.separator, lineWidth: 0.5)
             )
+            .accessibilityHidden(true)
     }
 }

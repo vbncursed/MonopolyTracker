@@ -75,7 +75,7 @@ struct GameSettingsView: View {
     private func summarySection(for game: Game) -> some View {
         Section("Текущая игра") {
             LabeledContent("Стартовый баланс") {
-                Text(game.startingBalance, format: .monopolyMoney)
+                Text(game.startingBalance.formatted(.monopolyMoney))
                     .monospacedDigit()
             }
             LabeledContent("Игроков") {

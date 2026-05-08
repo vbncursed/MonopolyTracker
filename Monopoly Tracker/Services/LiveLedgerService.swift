@@ -85,13 +85,16 @@ final class LiveLedgerService: LedgerService {
 
     func balance(of player: Player) throws -> Money {
         let playerID = player.id
+        // Скоупим до активной игры — иначе балансы могут утечь между играми,
+        // если в БД есть архивные транзакции с тем же playerID.
         let descriptor = FetchDescriptor<Transaction>(
             predicate: #Predicate { txn in
-                txn.fromPlayerID == playerID || txn.toPlayerID == playerID
+                (txn.fromPlayerID == playerID || txn.toPlayerID == playerID)
+                && txn.game?.endedAt == nil
             }
         )
         let txns = try context.fetch(descriptor)
-        return txns.reduce(Money.zero) { partial, txn in
+        return txns.reduce(Decimal.zero) { partial, txn in
             partial + txn.signedAmount(for: playerID)
         }
     }

@@ -28,7 +28,7 @@ struct PlayersListView: View {
                 ForEach(players) { player in
                     PlayerRowView(
                         player: player,
-                        balance: balances[player.id, default: .zero]
+                        balance: balances[player.id, default: 0]
                     )
                 }
                 .onDelete(perform: deletePlayers)
@@ -44,10 +44,10 @@ struct PlayersListView: View {
         var map: [UUID: Money] = [:]
         for txn in allTransactions {
             if let from = txn.fromPlayerID {
-                map[from, default: .zero] -= txn.amount
+                map[from, default: 0] -= txn.amount
             }
             if let to = txn.toPlayerID {
-                map[to, default: .zero] += txn.amount
+                map[to, default: 0] += txn.amount
             }
         }
         return map
@@ -79,25 +79,27 @@ private struct PlayerRowView: View, Equatable {
                 .frame(width: 28, height: 28)
                 .overlay(
                     Text(initial)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(.footnote, weight: .medium))
                         .foregroundStyle(.white)
                 )
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(player.name)
-                    .font(.system(size: 15, weight: .regular))
+                    .font(.body)
                 Text("Место \(player.seatOrder + 1)")
-                    .font(.system(size: 11))
+                    .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
 
             Spacer()
 
-            Text(balance, format: .monopolyMoney)
-                .font(.system(size: 17, weight: .light, design: .monospaced))
+            Text(balance.formatted(.monopolyMoney))
+                .font(.system(.body, design: .monospaced).weight(.light))
                 .foregroundStyle(balance < 0 ? Color.red : Color.primary)
                 .contentTransition(.numericText(value: NSDecimalNumber(decimal: balance).doubleValue))
                 .monospacedDigit()
+                .accessibilityLabel("Баланс \(player.name): \(balance.formatted(.monopolyMoney))")
         }
         .padding(.vertical, 4)
     }
