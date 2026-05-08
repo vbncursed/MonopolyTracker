@@ -9,7 +9,7 @@ struct GameSettingsView: View {
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @AppStorage("languageMode") private var languageMode: LanguageMode = .system
 
-    @State private var showEndConfirmation: Bool = false
+    @State private var summaryGame: Game?
     @State private var newPlayerName: String = ""
     @State private var addPlayerError: LedgerError?
 
@@ -29,13 +29,10 @@ struct GameSettingsView: View {
                 aboutSection
             }
             .navigationTitle("Настройки")
-            .alert("Сбросить игру?", isPresented: $showEndConfirmation) {
-                Button("Сбросить", role: .destructive) {
+            .sheet(item: $summaryGame) { game in
+                GameSummaryView(game: game) {
                     try? container.ledger.endActiveGame()
                 }
-                Button("Отмена", role: .cancel) {}
-            } message: {
-                Text("Текущая игра завершится, история сохранится. Сразу после этого можно начать новую.")
             }
             .alert(
                 "Не удалось добавить игрока",
@@ -107,12 +104,12 @@ struct GameSettingsView: View {
     private var resetSection: some View {
         Section {
             Button(role: .destructive) {
-                showEndConfirmation = true
+                summaryGame = activeGame
             } label: {
-                Label("Сбросить игру", systemImage: "arrow.counterclockwise")
+                Label("Завершить игру", systemImage: "flag.checkered")
             }
         } footer: {
-            Text("Текущая игра завершится, журнал сохранится. После сброса вы сможете начать новую игру.")
+            Text("Покажем итоговую таблицу с балансами. После подтверждения начнётся новая партия.")
         }
     }
 

@@ -67,6 +67,8 @@ struct TransferView: View {
             amountHero
             metaForm(viewModel: viewModel)
         }
+        .sensoryFeedback(.success, trigger: viewModel.successCount)
+        .sensoryFeedback(.error, trigger: viewModel.errorCount)
         .alert(
             "Ошибка перевода",
             isPresented: errorBinding(viewModel: viewModel),

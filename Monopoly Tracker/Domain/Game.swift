@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class Game {
+final class Game: Identifiable {
     #Index<Game>(
         [\.endedAt],
         [\.startedAt]

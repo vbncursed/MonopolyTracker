@@ -7,6 +7,8 @@ enum LedgerError: LocalizedError, Equatable {
     case bankToBank
     case missingPlayer
     case tooFewPlayers
+    case tooManyPlayers
+    case cannotReverseOpening
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +18,8 @@ enum LedgerError: LocalizedError, Equatable {
         case .bankToBank: String(localized: "Перевод от банка к банку не имеет смысла.")
         case .missingPlayer: String(localized: "Игрок не найден.")
         case .tooFewPlayers: String(localized: "Нужно как минимум двое игроков.")
+        case .tooManyPlayers: String(localized: "Максимум — 8 игроков.")
+        case .cannotReverseOpening: String(localized: "Стартовую раздачу нельзя отменить.")
         }
     }
 }

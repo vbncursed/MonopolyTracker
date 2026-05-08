@@ -11,6 +11,12 @@ final class TransferViewModel {
     private(set) var lastError: LedgerError?
     private(set) var didSucceed: Bool = false
 
+    /// Монотонный счётчик успешных submit'ов. Используется как trigger для
+    /// `.sensoryFeedback` — он сравнивает значения по равенству, поэтому
+    /// `didSucceed: Bool` не годится (true → true после первого успеха).
+    private(set) var successCount: Int = 0
+    private(set) var errorCount: Int = 0
+
     private let ledger: LedgerService
     private let resolvePlayer: (UUID) -> Player?
 
@@ -55,11 +61,14 @@ final class TransferViewModel {
                 note: note
             )
             didSucceed = true
+            successCount += 1
             resetForNextTransfer()
         } catch let error as LedgerError {
             lastError = error
+            errorCount += 1
         } catch {
             lastError = .nonPositiveAmount
+            errorCount += 1
         }
     }
 

@@ -35,4 +35,14 @@ protocol LedgerService: AnyObject {
 
     /// Удаляет игрока из активной игры. История транзакций сохраняется (имя денормализовано).
     func removePlayer(_ player: Player) throws
+
+    /// Создаёт компенсирующую транзакцию (`.reversal`), отменяющую денежный
+    /// эффект `original`. Журнал не модифицируется — `original` остаётся,
+    /// добавляется новая запись с обратным направлением и тем же amount.
+    /// Стартовую раздачу (`gameStart`) отменить нельзя — это сломало бы
+    /// инвариант стартового баланса.
+    func reverseTransaction(_ original: Transaction) throws
 }
+
+/// Максимальное число игроков в одной партии. Соответствует UI-капу в `NewGameView`.
+let monopolyMaxPlayers = 8

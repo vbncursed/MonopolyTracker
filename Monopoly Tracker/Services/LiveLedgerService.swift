@@ -23,6 +23,7 @@ final class LiveLedgerService: LedgerService {
     func startGame(playerNames: [String], startingBalance: Money) throws -> Game {
         let trimmed = playerNames.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         guard trimmed.count >= 2 else { throw LedgerError.tooFewPlayers }
+        guard trimmed.count <= monopolyMaxPlayers else { throw LedgerError.tooManyPlayers }
 
         try endActiveGameIfNeeded()
 
@@ -105,6 +106,7 @@ final class LiveLedgerService: LedgerService {
         guard !trimmed.isEmpty else { throw LedgerError.missingPlayer }
 
         guard let game = try activeGame() else { throw LedgerError.noActiveGame }
+        guard game.players.count < monopolyMaxPlayers else { throw LedgerError.tooManyPlayers }
 
         let nextSeat = (game.players.map(\.seatOrder).max() ?? -1) + 1
         let player = Player(name: trimmed, colorHex: colorHex, seatOrder: nextSeat)
@@ -127,6 +129,42 @@ final class LiveLedgerService: LedgerService {
 
     func removePlayer(_ player: Player) throws {
         context.delete(player)
+        try context.save()
+    }
+
+    func reverseTransaction(_ original: Transaction) throws {
+        guard original.kind != .gameStart else { throw LedgerError.cannotReverseOpening }
+        guard let game = try activeGame() else { throw LedgerError.noActiveGame }
+
+        // from реверсала = to оригинала, и наоборот. nil остаётся nil (банк).
+        let reversedFromID = original.toPlayerID
+        let reversedToID = original.fromPlayerID
+        let reversedFromPlayer = reversedFromID.flatMap { id in
+            game.players.first(where: { $0.id == id })
+        }
+        let reversedToPlayer = reversedToID.flatMap { id in
+            game.players.first(where: { $0.id == id })
+        }
+
+        // Если оригинал ссылался на игрока, который удалён — Player object нет,
+        // но имя денормализовано. Пишем reversal через сырой Transaction-init,
+        // чтобы сохранить корректные имена даже без живого Player.
+        let reversal = Transaction(
+            id: UUID(),
+            timestamp: .now,
+            amount: original.amount,
+            kind: .reversal,
+            from: reversedFromPlayer,
+            to: reversedToPlayer,
+            note: String(localized: "Отмена транзакции")
+        )
+        // Денормализованные имена из оригинала (на случай удалённых игроков).
+        reversal.fromPlayerID = reversedFromID
+        reversal.fromPlayerName = original.toPlayerName
+        reversal.toPlayerID = reversedToID
+        reversal.toPlayerName = original.fromPlayerName
+        reversal.game = game
+        context.insert(reversal)
         try context.save()
     }
 

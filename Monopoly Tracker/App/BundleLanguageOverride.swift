@@ -7,8 +7,12 @@ import ObjectiveC
 /// SwiftUI кэширует строки в `Text`, поэтому вызывающая сторона должна
 /// выставить `.id(languageMode)` на корне дерева, чтобы заставить
 /// пересборку всех `Text` после смены языка.
+@MainActor
 enum BundleLanguageOverride {
-    private static var bundleAssociationKey: UInt8 = 0
+    /// Ключ-якорь для objc_setAssociatedObject — нужен только адрес, само
+    /// значение игнорируется. nonisolated(unsafe), потому что adresable из
+    /// swizzled-метода с любого треда.
+    nonisolated(unsafe) private static var bundleAssociationKey: UInt8 = 0
     private static var didSwizzle = false
 
     /// Применяет выбранный язык. nil — снимает override и возвращает системный.
@@ -46,7 +50,10 @@ enum BundleLanguageOverride {
         method_exchangeImplementations(originalMethod, swizzledMethod)
     }
 
-    fileprivate static func overrideBundle(for bundle: Bundle) -> Bundle? {
+    /// Доступ из swizzled-метода `Bundle.localizedString`, который вызывается
+    /// SwiftUI с любой нити при отрисовке. `nonisolated` снимает MainActor-
+    /// требование; objc_getAssociatedObject thread-safe.
+    nonisolated fileprivate static func overrideBundle(for bundle: Bundle) -> Bundle? {
         objc_getAssociatedObject(bundle, &bundleAssociationKey) as? Bundle
     }
 }

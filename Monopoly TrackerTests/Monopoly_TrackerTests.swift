@@ -143,6 +143,54 @@ struct LedgerServiceTests {
         #expect(txns.first?.fromPlayerName == "A")
     }
 
+    @Test func startGame_rejectsMoreThanEightPlayers() async throws {
+        let service = try Self.makeService()
+        let nine = (1...9).map { "P\($0)" }
+
+        #expect(throws: LedgerError.tooManyPlayers) {
+            try service.startGame(playerNames: nine, startingBalance: 1500)
+        }
+    }
+
+    @Test func addPlayer_rejectedWhenRosterFull() async throws {
+        let service = try Self.makeService()
+        let names = (1...8).map { "P\($0)" }
+        _ = try service.startGame(playerNames: names, startingBalance: 1500)
+
+        #expect(throws: LedgerError.tooManyPlayers) {
+            try service.addPlayer(name: "P9", colorHex: "#000000")
+        }
+    }
+
+    @Test func reverseTransaction_inverts_andLeavesOriginalIntact() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 1500)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+        let bob = try #require(game.players.first(where: { $0.name == "B" }))
+
+        try service.record(amount: 200, kind: .transfer, from: alice, to: bob, note: nil)
+        let original = try #require(game.transactions.first(where: { $0.kind == .transfer }))
+
+        try service.reverseTransaction(original)
+
+        #expect(try service.balance(of: alice) == 1500, "Алиса вернулась к стартовому балансу")
+        #expect(try service.balance(of: bob) == 1500, "Боб вернулся к стартовому балансу")
+        let reversals = game.transactions.filter { $0.kind == .reversal }
+        #expect(reversals.count == 1)
+        #expect(reversals.first?.fromPlayerID == bob.id, "У реверсала направление инвертировано")
+        #expect(reversals.first?.toPlayerID == alice.id)
+    }
+
+    @Test func reverseTransaction_rejectsGameStart() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 1500)
+        let opening = try #require(game.transactions.first(where: { $0.kind == .gameStart }))
+
+        #expect(throws: LedgerError.cannotReverseOpening) {
+            try service.reverseTransaction(opening)
+        }
+    }
+
     @Test func endActiveGame_preservesHistory() async throws {
         let service = try Self.makeService()
         let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 100)

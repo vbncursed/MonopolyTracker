@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
+    @Environment(AppContainer.self) private var container
     @Query(
         filter: #Predicate<Transaction> { $0.game?.endedAt == nil },
         sort: \Transaction.timestamp,
@@ -9,11 +10,21 @@ struct HistoryView: View {
     )
     private var transactions: [Transaction]
 
+    @State private var reverseError: LedgerError?
+
     var body: some View {
         NavigationStack {
             List {
                 ForEach(transactions) { txn in
                     TransactionRowView(transaction: txn)
+                        .swipeActions(edge: .trailing) {
+                            if txn.kind != .gameStart && txn.kind != .reversal {
+                                Button("Отменить", systemImage: "arrow.uturn.backward") {
+                                    reverse(txn)
+                                }
+                                .tint(.orange)
+                            }
+                        }
                 }
             }
             .listStyle(.plain)
@@ -27,6 +38,32 @@ struct HistoryView: View {
                     )
                 }
             }
+            .alert(
+                "Не удалось отменить",
+                isPresented: reverseErrorBinding,
+                presenting: reverseError
+            ) { _ in
+                Button("OK", role: .cancel) { reverseError = nil }
+            } message: { error in
+                Text(error.errorDescription ?? "")
+            }
+        }
+    }
+
+    private var reverseErrorBinding: Binding<Bool> {
+        Binding(
+            get: { reverseError != nil },
+            set: { if !$0 { reverseError = nil } }
+        )
+    }
+
+    private func reverse(_ txn: Transaction) {
+        do {
+            try container.ledger.reverseTransaction(txn)
+        } catch let error as LedgerError {
+            reverseError = error
+        } catch {
+            reverseError = .missingPlayer
         }
     }
 }
@@ -57,7 +94,7 @@ private struct TransactionRowView: View, Equatable {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                Text(transaction.timestamp, format: .dateTime.day().month().hour().minute())
+                Text(timestampLabel)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -75,5 +112,15 @@ private struct TransactionRowView: View, Equatable {
         let from = transaction.fromPlayerName ?? String(localized: "Банк")
         let to = transaction.toPlayerName ?? String(localized: "Банк")
         return "\(from) → \(to)"
+    }
+
+    /// «5 минут назад» для свежих транзакций, «8 May 14:23» для давних.
+    /// Порог — 24 часа: внутри — относительный формат, снаружи — абсолютный.
+    private var timestampLabel: String {
+        let interval = Date.now.timeIntervalSince(transaction.timestamp)
+        if interval < 60 * 60 * 24 {
+            return transaction.timestamp.formatted(.relative(presentation: .numeric))
+        }
+        return transaction.timestamp.formatted(.dateTime.day().month().hour().minute())
     }
 }
