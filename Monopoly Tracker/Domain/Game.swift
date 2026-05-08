@@ -3,6 +3,11 @@ import SwiftData
 
 @Model
 final class Game {
+    #Index<Game>(
+        [\.endedAt],
+        [\.startedAt]
+    )
+
     @Attribute(.unique) var id: UUID
     var startedAt: Date
     var endedAt: Date?

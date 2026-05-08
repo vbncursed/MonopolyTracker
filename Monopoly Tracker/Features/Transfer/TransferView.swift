@@ -62,8 +62,16 @@ struct TransferView: View {
                     .keyboardType(.numberPad)
                     .font(.system(size: 32, weight: .light, design: .monospaced))
                     .focused($amountFieldFocused)
-                    .onChange(of: amountText) { _, newValue in
-                        viewModel.amount = Money(parsing: newValue) ?? 0
+                    .task(id: amountText) {
+                        // Debounce: viewModel.amount синкается раз в 150 мс,
+                        // чтобы не дёргать observable на каждый нажатый символ —
+                        // иначе `Form` пересчитывает layout и появляются фризы.
+                        try? await Task.sleep(for: .milliseconds(150))
+                        guard !Task.isCancelled else { return }
+                        let parsed = Money(parsing: amountText) ?? 0
+                        if viewModel.amount != parsed {
+                            viewModel.amount = parsed
+                        }
                     }
 
                 ScrollView(.horizontal, showsIndicators: false) {

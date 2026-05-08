@@ -17,12 +17,13 @@ struct PlayersListView: View {
     }
 
     private var playersScreen: some View {
-        NavigationStack {
+        let balances = makeBalances()
+        return NavigationStack {
             List {
                 ForEach(players) { player in
                     PlayerRowView(
                         player: player,
-                        balance: balance(for: player)
+                        balance: balances[player.id, default: .zero]
                     )
                 }
                 .onDelete(perform: deletePlayers)
@@ -32,11 +33,19 @@ struct PlayersListView: View {
         }
     }
 
-    private func balance(for player: Player) -> Money {
-        let id = player.id
-        return allTransactions.reduce(Money.zero) { partial, txn in
-            partial + txn.signedAmount(for: id)
+    /// Один O(N) проход по транзакциям активной игры → словарь playerID → balance.
+    /// Раньше каждая строка делала свой reduce, итого O(N×M). Теперь O(N+M).
+    private func makeBalances() -> [UUID: Money] {
+        var map: [UUID: Money] = [:]
+        for txn in allTransactions {
+            if let from = txn.fromPlayerID {
+                map[from, default: .zero] -= txn.amount
+            }
+            if let to = txn.toPlayerID {
+                map[to, default: .zero] += txn.amount
+            }
         }
+        return map
     }
 
     private func deletePlayers(at offsets: IndexSet) {
@@ -46,9 +55,17 @@ struct PlayersListView: View {
     }
 }
 
-private struct PlayerRowView: View {
+private struct PlayerRowView: View, Equatable {
     let player: Player
     let balance: Money
+
+    static func == (lhs: PlayerRowView, rhs: PlayerRowView) -> Bool {
+        lhs.player.id == rhs.player.id
+            && lhs.player.name == rhs.player.name
+            && lhs.player.colorHex == rhs.player.colorHex
+            && lhs.player.seatOrder == rhs.player.seatOrder
+            && lhs.balance == rhs.balance
+    }
 
     var body: some View {
         HStack(spacing: 12) {

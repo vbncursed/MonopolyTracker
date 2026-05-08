@@ -5,7 +5,6 @@ struct GameSettingsView: View {
     @Environment(AppContainer.self) private var container
     @Query(filter: #Predicate<Game> { $0.endedAt == nil })
     private var activeGames: [Game]
-    @Query private var allTransactions: [Transaction]
 
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
     @AppStorage("languageMode") private var languageMode: LanguageMode = .system
@@ -83,7 +82,7 @@ struct GameSettingsView: View {
                 Text(game.players.count, format: .number)
             }
             LabeledContent("Транзакций") {
-                Text(allTransactions.count, format: .number)
+                Text(game.transactions.count, format: .number)
             }
             LabeledContent("Начата") {
                 Text(game.startedAt, format: .dateTime.day().month().year().hour().minute())

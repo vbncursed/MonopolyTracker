@@ -15,3 +15,7 @@ xcuserdata/
 
 # Throwaway artifacts
 myview.png
+
+# xctrace artifacts
+Launch_*.trace/
+*.trace/

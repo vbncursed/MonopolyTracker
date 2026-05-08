@@ -3,6 +3,12 @@ import SwiftData
 
 @Model
 final class Transaction {
+    #Index<Transaction>(
+        [\.timestamp],
+        [\.fromPlayerID],
+        [\.toPlayerID]
+    )
+
     @Attribute(.unique) var id: UUID
     var timestamp: Date
     var amount: Money
