@@ -10,9 +10,9 @@
 
 Приложение **не** симулирует игру. Оно берёт на себя то, что плохо получается у людей за столом — деньги, счёт, журнал переходов. Идея проста: **журнал транзакций — единственный источник правды**, балансы выводятся из него.
 
-- Создание новой игры с настраиваемым стартовым балансом и составом игроков.
+- Создание новой игры с настраиваемым стартовым балансом и составом игроков (имена могут повторяться — игроки различаются цветом фишки и местом за столом).
 - Переводы: игрок ↔ игрок, банк ↔ игрок, типы (аренда, зарплата, штраф, …), необязательный комментарий.
-- Полная история — кто кому, когда и зачем.
+- Полная история — кто кому, когда и зачем; сохраняется даже после удаления игрока (имена денормализованы в записи).
 - Сброс/завершение игры с сохранением истории.
 - Овердрафт разрешён (как в реальной Монополии — банкротство это состояние, а не запрет операции).
 - Тёмная/светлая/системная темы, переключение языка RU/EN без перезапуска.
@@ -20,10 +20,11 @@
 
 ## Стек
 
-- **iOS 26.4+**, Swift 6.2, SwiftUI, SwiftData
+- **iOS 26.4+**, Swift 6.2 toolchain, SwiftUI, SwiftData
 - **Архитектура**: MVVM по умолчанию, MV там где `@Query` достаточно (см. `swiftui-view-refactor`).
-- **Persistence**: `ModelContainer` инжектится через `AppContainer` (composition root). Все денежные операции идут через единственный `LedgerService` — это инвариант домена, проверенный тестами.
-- **Локализация**: `Localizable.xcstrings` (ru-источник + en), runtime-свитч языка через swizzle `Bundle.localizedString`.
+- **Persistence**: `ModelContainer` инжектится через `AppContainer` (composition root). Все денежные операции идут через единственный `LedgerService` — это инвариант домена, проверенный тестами. SwiftData `#Index` на горячих полях (`Transaction.timestamp/fromPlayerID/toPlayerID`, `Game.endedAt/startedAt`).
+- **Локализация**: `Localizable.xcstrings` (ru-источник + en), runtime-свитч языка через swizzle `Bundle.localizedString` без перезапуска.
+- **Производительность**: дебаунс 150 мс на ввод суммы, fan-out `[UUID: Money]` вместо per-row reduce, `Equatable` на строках списка игроков.
 
 ## Архитектура в одном экране
 
@@ -31,7 +32,7 @@
 View (SwiftUI)
    │   @Environment(AppContainer)
    ▼
-ViewModel или MV-View с @Query
+ViewModel (только когда нужна форма + submit) или MV-View с @Query
    │
    ▼
 LedgerService  ← единственный чокпоинт записи денежных движений
@@ -51,7 +52,7 @@ Domain-слой UI-агностичен: модели не знают про Swi
 xcodebuild -project "Monopoly Tracker.xcodeproj" -scheme "Monopoly Tracker" \
   -destination 'generic/platform=iOS Simulator' build
 
-# Все юнит-тесты на конкретном устройстве
+# Все юнит-тесты
 xcodebuild -project "Monopoly Tracker.xcodeproj" -scheme "Monopoly Tracker" \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 
@@ -63,6 +64,21 @@ xcodebuild -project "Monopoly Tracker.xcodeproj" -scheme "Monopoly Tracker" \
 
 В путях есть пробел — кавычки обязательны.
 
+## Метрики
+
+Замерено на Release-сборке, iPhone 17 Pro Simulator (iOS 26.4.1).
+
+| Метрика | Значение |
+|---|---|
+| Cold launch (`simctl launch` → return) | **247–357 мс** |
+| Physical footprint (idle, через 3 с) | **27.5 МБ** |
+| Peak footprint | 27.8 МБ |
+| Размер бандла | **3.3 МБ** (Assets.car — 2.0 МБ под три варианта иконки, бинарь — 1.3 МБ) |
+| Кодовая база | 1439 строк Swift |
+| Прогон 14 тестов (build + install + run) | 24 с |
+| Чистое выполнение тестов | ~0.6 с |
+| Самый быстрый / медленный тест | 19 мс / 62 мс |
+
 ## Тесты
 
 14 тестов на Swift Testing. Главное в `LedgerServiceTests`:
@@ -70,6 +86,7 @@ xcodebuild -project "Monopoly Tracker.xcodeproj" -scheme "Monopoly Tracker" \
 - Стартовая раздача создаёт по `gameStart`-транзакции на каждого игрока.
 - Переводы корректно меняют оба баланса.
 - Овердрафт разрешён — баланс может уйти в минус.
+- Дубликаты имён разрешены (игроки идентифицируются по `UUID`).
 - Завершение игры проставляет `endedAt`, журнал не теряется.
 - **Главный инвариант:** `Σ балансов игроков == N × startingBalance` при любом наборе внутренних переводов.
 
@@ -83,7 +100,7 @@ Monopoly Tracker/
 ├─ Domain/                  # @Model + Money + расширения
 ├─ Services/                # LedgerService (protocol) + LiveLedgerService (@MainActor)
 ├─ Features/
-│  ├─ Root/                 # таб-бар
+│  ├─ Root/                 # таб-бар (всегда виден)
 │  ├─ NewGame/              # форма старта
 │  ├─ Players/              # список с балансами (MV через @Query)
 │  ├─ Transfer/             # форма перевода + ViewModel
