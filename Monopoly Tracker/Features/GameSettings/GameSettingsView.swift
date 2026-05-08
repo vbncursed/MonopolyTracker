@@ -54,8 +54,7 @@ struct GameSettingsView: View {
         Section("Оформление") {
             Picker(selection: $appearanceMode) {
                 ForEach(AppearanceMode.allCases) { mode in
-                    Label(mode.displayName, systemImage: mode.systemImageName)
-                        .tag(mode)
+                    Text(mode.displayName).tag(mode)
                 }
             } label: {
                 Label("Тема", systemImage: "paintbrush")

@@ -63,7 +63,7 @@ struct TransferView: View {
                     .font(.system(size: 32, weight: .light, design: .monospaced))
                     .focused($amountFieldFocused)
                     .onChange(of: amountText) { _, newValue in
-                        viewModel.amount = Money(string: newValue) ?? 0
+                        viewModel.amount = Money(parsing: newValue) ?? 0
                     }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -115,6 +115,12 @@ struct TransferView: View {
                 .disabled(!viewModel.canSubmit)
             }
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Готово") { amountFieldFocused = false }
+            }
+        }
         .alert(
             "Ошибка перевода",
             isPresented: errorBinding(viewModel: viewModel),
@@ -155,13 +161,19 @@ private struct PartyPicker: View {
 }
 
 private extension Money {
-    init?(string: String) {
-        let cleaned = string.filter { $0.isNumber || $0 == "." || $0 == "," }
+    /// Парсит свободно введённое пользователем число (русская/английская десятичная точка),
+    /// игнорируя любые нечисловые символы. Argument label `parsing:` намеренно не совпадает
+    /// с Foundation-овским `Decimal(string:)`, иначе Money == Decimal и вызов
+    /// `Decimal(string: cleaned)` превращается в бесконечную рекурсию.
+    init?(parsing input: String) {
+        let cleaned = input
+            .filter { $0.isNumber || $0 == "." || $0 == "," }
             .replacingOccurrences(of: ",", with: ".")
-        guard !cleaned.isEmpty, let value = Decimal(string: cleaned) else { return nil }
+        guard !cleaned.isEmpty, let value = Decimal(string: cleaned, locale: nil) else { return nil }
         self = value
     }
 
+    /// Целое представление без локального форматирования (для подстановки в TextField).
     var plainString: String {
         var value = self
         var rounded = Decimal()
