@@ -5,7 +5,6 @@ import Foundation
 final class TransferViewModel {
     var from: TransferParty = .bank
     var to: TransferParty = .bank
-    var amount: Money = 0
     var kind: TransactionKind = .transfer
     var note: String = ""
 
@@ -20,7 +19,10 @@ final class TransferViewModel {
         self.resolvePlayer = resolvePlayer
     }
 
-    var canSubmit: Bool {
+    /// Сумма НЕ хранится в наблюдаемой модели — она живёт как локальный
+    /// `@State` во вью, чтобы каждое нажатие клавиши не дёргало
+    /// observable-цепочку и не пересчитывало layout `Form`.
+    func canSubmit(amount: Money) -> Bool {
         guard amount > 0 else { return false }
         if from == to { return false }
         if from.isBank && to.isBank { return false }
@@ -37,7 +39,7 @@ final class TransferViewModel {
         to = saved
     }
 
-    func submit() {
+    func submit(amount: Money) {
         didSucceed = false
         lastError = nil
 
@@ -77,7 +79,6 @@ final class TransferViewModel {
     }
 
     private func resetForNextTransfer() {
-        amount = 0
         note = ""
         kind = .transfer
     }

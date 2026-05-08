@@ -3,8 +3,13 @@ import SwiftUI
 
 struct PlayersListView: View {
     @Environment(AppContainer.self) private var container
-    @Query(sort: \Player.seatOrder) private var players: [Player]
-    @Query private var allTransactions: [Transaction]
+    @Query(
+        filter: #Predicate<Player> { $0.game?.endedAt == nil },
+        sort: \Player.seatOrder
+    )
+    private var players: [Player]
+    @Query(filter: #Predicate<Transaction> { $0.game?.endedAt == nil })
+    private var allTransactions: [Transaction]
     @Query(filter: #Predicate<Game> { $0.endedAt == nil })
     private var activeGames: [Game]
 

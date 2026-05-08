@@ -1,13 +1,20 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct TransferView: View {
     @Environment(AppContainer.self) private var container
-    @Query(sort: \Player.seatOrder) private var players: [Player]
+    @Query(
+        filter: #Predicate<Player> { $0.game?.endedAt == nil },
+        sort: \Player.seatOrder
+    )
+    private var players: [Player]
 
     @State private var viewModel: TransferViewModel?
     @State private var amountText: String = ""
-    @FocusState private var amountFieldFocused: Bool
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable { case amount, note }
 
     private static let quickAmounts: [Money] = [50, 100, 200, 500, 1000]
 
@@ -15,13 +22,19 @@ struct TransferView: View {
         NavigationStack {
             Group {
                 if let viewModel {
-                    form(viewModel: viewModel)
+                    content(viewModel: viewModel)
                 } else {
                     ProgressView()
                 }
             }
             .navigationTitle("Перевод")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Готово") { focusedField = nil }
+                }
+            }
         }
         .task {
             if viewModel == nil {
@@ -35,8 +48,90 @@ struct TransferView: View {
         }
     }
 
+    private var parsedAmount: Money {
+        Money(parsing: amountText) ?? 0
+    }
+
+    /// Чистит ввод до цифр и форматирует через `.monopolyDigits` —
+    /// получаем "1,500" вместо "1500" в реальном времени.
+    private static func formatAmount(_ raw: String) -> String {
+        let digits = raw.filter(\.isNumber)
+        guard !digits.isEmpty else { return "" }
+        guard let value = Decimal(string: digits, locale: nil) else { return "" }
+        return value.formatted(.monopolyDigits)
+    }
+
     @ViewBuilder
-    private func form(viewModel: TransferViewModel) -> some View {
+    private func content(viewModel: TransferViewModel) -> some View {
+        VStack(spacing: 0) {
+            amountHero
+            metaForm(viewModel: viewModel)
+        }
+        .alert(
+            "Ошибка перевода",
+            isPresented: errorBinding(viewModel: viewModel),
+            presenting: viewModel.lastError
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { error in
+            Text(error.errorDescription ?? "")
+        }
+    }
+
+    /// Hero-зона ввода суммы. Намеренно живёт ВНЕ `Form` — иначе iOS-26-овский
+    /// diffable layout `Form`-а пересчитывает все секции на каждое нажатие
+    /// клавиши, и появляются заметные пролагивания.
+    private var amountHero: some View {
+        VStack(spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(verbatim: "$")
+                    .foregroundStyle(.secondary)
+                TextField("0", text: $amountText)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.leading)
+                    .focused($focusedField, equals: .amount)
+                    .fixedSize()
+                    .onChange(of: amountText) { _, newValue in
+                        let reformatted = Self.formatAmount(newValue)
+                        if reformatted != amountText {
+                            amountText = reformatted
+                        }
+                    }
+            }
+            .font(.system(size: 44, weight: .light, design: .monospaced))
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .contentShape(Rectangle())
+            .onTapGesture { focusedField = .amount }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Self.quickAmounts, id: \.self) { value in
+                        Button {
+                            amountText = (parsedAmount + value).formatted(.monopolyDigits)
+                        } label: {
+                            Text("+" + value.formatted(.monopolyMoney))
+                        }
+                        .buttonStyle(.glass)
+                    }
+                    Button(role: .destructive) {
+                        amountText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.glass)
+                }
+                .scrollTargetLayout()
+            }
+            .contentMargins(.horizontal, 16, for: .scrollContent)
+            .scrollClipDisabled()
+        }
+        .padding(.vertical, 16)
+        .background(Color(.systemGroupedBackground))
+    }
+
+    @ViewBuilder
+    private func metaForm(viewModel: TransferViewModel) -> some View {
         @Bindable var bindable = viewModel
 
         Form {
@@ -57,46 +152,6 @@ struct TransferView: View {
                 PartyPicker(selection: $bindable.to, players: players)
             }
 
-            Section("Сумма") {
-                TextField("0", text: $amountText)
-                    .keyboardType(.numberPad)
-                    .font(.system(size: 32, weight: .light, design: .monospaced))
-                    .focused($amountFieldFocused)
-                    .task(id: amountText) {
-                        // Debounce: viewModel.amount синкается раз в 150 мс,
-                        // чтобы не дёргать observable на каждый нажатый символ —
-                        // иначе `Form` пересчитывает layout и появляются фризы.
-                        try? await Task.sleep(for: .milliseconds(150))
-                        guard !Task.isCancelled else { return }
-                        let parsed = Money(parsing: amountText) ?? 0
-                        if viewModel.amount != parsed {
-                            viewModel.amount = parsed
-                        }
-                    }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Self.quickAmounts, id: \.self) { value in
-                            Button {
-                                let next = (viewModel.amount) + value
-                                amountText = next.plainString
-                                viewModel.amount = next
-                            } label: {
-                                Text("+" + value.formatted(.monopolyMoney))
-                            }
-                            .buttonStyle(.glass)
-                        }
-                        Button(role: .destructive) {
-                            amountText = ""
-                            viewModel.amount = 0
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                        }
-                        .buttonStyle(.glass)
-                    }
-                }
-            }
-
             Section("Назначение") {
                 Picker("Тип", selection: $bindable.kind) {
                     ForEach(TransactionKind.allCases, id: \.self) { kind in
@@ -105,39 +160,35 @@ struct TransferView: View {
                     }
                 }
                 TextField("Комментарий (необязательно)", text: $bindable.note, axis: .vertical)
+                    .focused($focusedField, equals: .note)
                     .lineLimit(1...3)
             }
 
             Section {
-                Button {
-                    viewModel.submit()
-                    if viewModel.didSucceed {
-                        amountText = ""
-                        amountFieldFocused = false
+                SubmitButton(
+                    isEnabled: viewModel.canSubmit(amount: parsedAmount),
+                    onSubmit: {
+                        viewModel.submit(amount: parsedAmount)
+                        if viewModel.didSucceed {
+                            amountText = ""
+                            focusedField = nil
+                        }
                     }
-                } label: {
-                    Text("Перевести")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .disabled(!viewModel.canSubmit)
+                )
             }
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Готово") { amountFieldFocused = false }
+        .scrollDismissesKeyboard(.immediately)
+        // Тап по любой неактивной области формы — скрываем клавиатуру.
+        // simultaneousGesture срабатывает рядом с Form-овскими жестами,
+        // .onTapGesture Form проглатывает.
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder),
+                    to: nil, from: nil, for: nil
+                )
             }
-        }
-        .alert(
-            "Ошибка перевода",
-            isPresented: errorBinding(viewModel: viewModel),
-            presenting: viewModel.lastError
-        ) { _ in
-            Button("OK", role: .cancel) {}
-        } message: { error in
-            Text(error.errorDescription ?? "")
-        }
+        )
     }
 
     private func errorBinding(viewModel: TransferViewModel) -> Binding<Bool> {
@@ -145,6 +196,20 @@ struct TransferView: View {
             get: { viewModel.lastError != nil },
             set: { if !$0 { viewModel.clearError() } }
         )
+    }
+}
+
+private struct SubmitButton: View {
+    let isEnabled: Bool
+    let onSubmit: () -> Void
+
+    var body: some View {
+        Button(action: onSubmit) {
+            Text("Перевести")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glassProminent)
+        .disabled(!isEnabled)
     }
 }
 
@@ -169,15 +234,15 @@ private struct PartyPicker: View {
 }
 
 private extension Money {
-    /// Парсит свободно введённое пользователем число (русская/английская десятичная точка),
-    /// игнорируя любые нечисловые символы. Argument label `parsing:` намеренно не совпадает
-    /// с Foundation-овским `Decimal(string:)`, иначе Money == Decimal и вызов
-    /// `Decimal(string: cleaned)` превращается в бесконечную рекурсию.
+    /// Парсит свободно введённое пользователем число — оставляет только цифры
+    /// (запятые, пробелы, любые разделители тысяч игнорируются как форматирование).
+    /// В Монополии нет дробных сумм, поэтому десятичный разделитель тоже не нужен.
+    /// Argument label `parsing:` намеренно не совпадает с Foundation-овским
+    /// `Decimal(string:)` — иначе Money == Decimal и `Decimal(string: cleaned)`
+    /// внутри инициализатора уйдёт в бесконечную рекурсию.
     init?(parsing input: String) {
-        let cleaned = input
-            .filter { $0.isNumber || $0 == "." || $0 == "," }
-            .replacingOccurrences(of: ",", with: ".")
-        guard !cleaned.isEmpty, let value = Decimal(string: cleaned, locale: nil) else { return nil }
+        let digits = input.filter(\.isNumber)
+        guard !digits.isEmpty, let value = Decimal(string: digits, locale: nil) else { return nil }
         self = value
     }
 

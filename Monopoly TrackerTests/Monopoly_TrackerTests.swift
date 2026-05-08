@@ -173,16 +173,14 @@ struct TransferViewModelTests {
         let (vm, players, _) = try Self.setup()
         let alice = try #require(players.first)
 
-        #expect(!vm.canSubmit, "Старт: ноль сумма, обе стороны — банк")
-
-        vm.amount = 100
-        #expect(!vm.canSubmit, "Сумма есть, но from == to == банк")
+        #expect(!vm.canSubmit(amount: 0), "Старт: ноль сумма, обе стороны — банк")
+        #expect(!vm.canSubmit(amount: 100), "Сумма есть, но from == to == банк")
 
         vm.from = .player(alice.id)
-        #expect(vm.canSubmit, "Игрок → Банк должно быть валидным")
+        #expect(vm.canSubmit(amount: 100), "Игрок → Банк должно быть валидным")
 
         vm.to = .player(alice.id)
-        #expect(!vm.canSubmit, "Перевод самому себе невалиден")
+        #expect(!vm.canSubmit(amount: 100), "Перевод самому себе невалиден")
     }
 
     @Test func submit_recordsAndResetsForm() async throws {
@@ -192,23 +190,19 @@ struct TransferViewModelTests {
 
         vm.from = .player(alice.id)
         vm.to = .player(bob.id)
-        vm.amount = 250
         vm.note = "test"
 
-        vm.submit()
+        vm.submit(amount: 250)
 
         #expect(vm.didSucceed)
         #expect(vm.lastError == nil)
-        #expect(vm.amount == 0, "Форма сбрасывается после успеха")
-        #expect(vm.note.isEmpty)
+        #expect(vm.note.isEmpty, "Заметка сбрасывается после успеха")
     }
 
     @Test func submit_failurePathReportsError() async throws {
         let (vm, _, _) = try Self.setup()
-        // from == to == .bank → bankToBank, но canSubmit отсечёт раньше.
-        // Имитируем прямой невалидный вызов: amount = 0 + одна сторона игрок.
-        vm.amount = 0
-        vm.submit()
+        // from == to == .bank → bankToBank
+        vm.submit(amount: 0)
         #expect(!vm.didSucceed)
     }
 }

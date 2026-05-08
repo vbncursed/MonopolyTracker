@@ -2,7 +2,11 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
-    @Query(sort: \Transaction.timestamp, order: .reverse)
+    @Query(
+        filter: #Predicate<Transaction> { $0.game?.endedAt == nil },
+        sort: \Transaction.timestamp,
+        order: .reverse
+    )
     private var transactions: [Transaction]
 
     var body: some View {
