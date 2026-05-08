@@ -9,10 +9,12 @@ enum TransactionKind: String, Codable, CaseIterable, Hashable, Sendable {
     case fee
     case gameStart
     case reversal
+    case credit
+    case creditRepay
     case custom
 
-    /// Виды, доступные пользователю в Picker'е перевода. `gameStart` и `reversal`
-    /// генерируются сервисом, в UI выбора их быть не должно.
+    /// Виды, доступные пользователю в Picker'е перевода. `gameStart`, `reversal`,
+    /// `credit`, `creditRepay` генерируются сервисом и не появляются в UI выбора.
     static let userSelectable: [TransactionKind] = [
         .transfer, .bankPayout, .bankCollect, .rent, .salary, .fee, .custom,
     ]
@@ -27,6 +29,8 @@ enum TransactionKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .fee: String(localized: "Штраф")
         case .gameStart: String(localized: "Старт игры")
         case .reversal: String(localized: "Возврат")
+        case .credit: String(localized: "Кредит")
+        case .creditRepay: String(localized: "Возврат кредита")
         case .custom: String(localized: "Другое")
         }
     }
@@ -41,6 +45,8 @@ enum TransactionKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .fee: "exclamationmark.triangle"
         case .gameStart: "flag.checkered"
         case .reversal: "arrow.uturn.backward"
+        case .credit: "creditcard"
+        case .creditRepay: "creditcard.fill"
         case .custom: "ellipsis.circle"
         }
     }

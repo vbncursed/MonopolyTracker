@@ -30,6 +30,20 @@ struct PlayersListView: View {
                         player: player,
                         balance: balances[player.id, default: 0]
                     )
+                    .swipeActions(edge: .leading) {
+                        if !player.isBankrupt && !player.hasOutstandingCredit {
+                            Button("Кредит", systemImage: "creditcard") {
+                                try? container.ledger.takeCredit(player)
+                            }
+                            .tint(.blue)
+                        }
+                        if !player.isBankrupt && player.hasOutstandingCredit {
+                            Button("Вернуть кредит", systemImage: "creditcard.fill") {
+                                try? container.ledger.repayCredit(player)
+                            }
+                            .tint(.green)
+                        }
+                    }
                 }
                 .onDelete(perform: deletePlayers)
             }
@@ -69,6 +83,8 @@ private struct PlayerRowView: View, Equatable {
             && lhs.player.name == rhs.player.name
             && lhs.player.colorHex == rhs.player.colorHex
             && lhs.player.seatOrder == rhs.player.seatOrder
+            && lhs.player.isBankrupt == rhs.player.isBankrupt
+            && lhs.player.hasOutstandingCredit == rhs.player.hasOutstandingCredit
             && lhs.balance == rhs.balance
     }
 
@@ -82,14 +98,31 @@ private struct PlayerRowView: View, Equatable {
                         .font(.system(.footnote, weight: .medium))
                         .foregroundStyle(.white)
                 )
+                .opacity(player.isBankrupt ? 0.4 : 1)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(player.name)
-                    .font(.body)
-                Text("Место \(player.seatOrder + 1)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                HStack(spacing: 6) {
+                    Text(player.name)
+                        .font(.body)
+                        .foregroundStyle(player.isBankrupt ? .secondary : .primary)
+                        .strikethrough(player.isBankrupt)
+                    if player.hasOutstandingCredit {
+                        Image(systemName: "creditcard.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
+                            .accessibilityLabel("Открыт кредит")
+                    }
+                }
+                if player.isBankrupt {
+                    Text("Банкрот")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                } else {
+                    Text("Место \(player.seatOrder + 1)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             Spacer()

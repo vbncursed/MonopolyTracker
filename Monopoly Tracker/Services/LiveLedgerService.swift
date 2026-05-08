@@ -69,6 +69,9 @@ final class LiveLedgerService: LedgerService {
         guard amount > 0 else { throw LedgerError.nonPositiveAmount }
         guard from != nil || to != nil else { throw LedgerError.bankToBank }
         if let from, let to, from.id == to.id { throw LedgerError.selfTransfer }
+        if from?.isBankrupt == true || to?.isBankrupt == true {
+            throw LedgerError.playerBankrupt
+        }
 
         guard let game = try activeGame() else { throw LedgerError.noActiveGame }
 
@@ -82,6 +85,11 @@ final class LiveLedgerService: LedgerService {
         txn.game = game
         context.insert(txn)
         try context.save()
+
+        // После сохранения проверяем участников на банкротство —
+        // если новый баланс ушёл ниже floor, помечаем флагом.
+        try updateBankruptcyState(for: from)
+        try updateBankruptcyState(for: to)
     }
 
     func balance(of player: Player) throws -> Money {
@@ -132,6 +140,44 @@ final class LiveLedgerService: LedgerService {
         try context.save()
     }
 
+    func takeCredit(_ player: Player) throws {
+        guard !player.isBankrupt else { throw LedgerError.playerBankrupt }
+        guard !player.hasOutstandingCredit else { throw LedgerError.creditAlreadyOutstanding }
+        guard let game = try activeGame() else { throw LedgerError.noActiveGame }
+
+        let credit = Transaction(
+            amount: monopolyCreditPrincipal,
+            kind: .credit,
+            from: nil,
+            to: player,
+            note: nil
+        )
+        credit.game = game
+        context.insert(credit)
+        player.hasOutstandingCredit = true
+        try context.save()
+    }
+
+    func repayCredit(_ player: Player) throws {
+        guard !player.isBankrupt else { throw LedgerError.playerBankrupt }
+        guard player.hasOutstandingCredit else { throw LedgerError.noCreditOutstanding }
+        guard let game = try activeGame() else { throw LedgerError.noActiveGame }
+
+        let repayment = Transaction(
+            amount: monopolyCreditRepayment,
+            kind: .creditRepay,
+            from: player,
+            to: nil,
+            note: nil
+        )
+        repayment.game = game
+        context.insert(repayment)
+        player.hasOutstandingCredit = false
+        try context.save()
+
+        try updateBankruptcyState(for: player)
+    }
+
     func reverseTransaction(_ original: Transaction) throws {
         guard original.kind != .gameStart else { throw LedgerError.cannotReverseOpening }
         guard let game = try activeGame() else { throw LedgerError.noActiveGame }
@@ -166,6 +212,9 @@ final class LiveLedgerService: LedgerService {
         reversal.game = game
         context.insert(reversal)
         try context.save()
+
+        try updateBankruptcyState(for: reversedFromPlayer)
+        try updateBankruptcyState(for: reversedToPlayer)
     }
 
     // MARK: - Helpers
@@ -173,6 +222,23 @@ final class LiveLedgerService: LedgerService {
     private func endActiveGameIfNeeded() throws {
         if let active = try activeGame() {
             active.endedAt = .now
+        }
+    }
+
+    /// Помечает игрока банкротом, если его баланс ушёл ниже допустимого пола.
+    /// Пол динамический:
+    ///   - без кредита: пол = 0 (любой минус без кредита → банкрот);
+    ///   - с открытым кредитом: пол = -5_000 (кредит даёт допуск ровно на 5k).
+    /// Флаг банкротства необратим в рамках партии — в Монополии разорение
+    /// окончательное.
+    private func updateBankruptcyState(for player: Player?) throws {
+        guard let player else { return }
+        guard !player.isBankrupt else { return }
+        let balance = try balance(of: player)
+        let floor: Money = player.hasOutstandingCredit ? monopolyBankruptcyFloor : 0
+        if balance < floor {
+            player.isBankrupt = true
+            try context.save()
         }
     }
 

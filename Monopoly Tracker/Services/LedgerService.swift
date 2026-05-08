@@ -42,7 +42,26 @@ protocol LedgerService: AnyObject {
     /// Стартовую раздачу (`gameStart`) отменить нельзя — это сломало бы
     /// инвариант стартового баланса.
     func reverseTransaction(_ original: Transaction) throws
+
+    /// Выдаёт игроку кредит: `monopolyCreditPrincipal` уходит на счёт от банка,
+    /// флаг `hasOutstandingCredit` поднимается. Игрок обязан вернуть
+    /// `monopolyCreditRepayment`. Нельзя взять второй кредит до возврата первого
+    /// и нельзя кредитовать банкрота.
+    func takeCredit(_ player: Player) throws
+
+    /// Возврат кредита: `monopolyCreditRepayment` уходит со счёта в банк,
+    /// флаг сбрасывается. Доступно только если кредит был взят.
+    func repayCredit(_ player: Player) throws
 }
 
 /// Максимальное число игроков в одной партии. Соответствует UI-капу в `NewGameView`.
 let monopolyMaxPlayers = 8
+
+/// Порог банкротства: баланс ниже этого значения переводит игрока в `.isBankrupt`.
+let monopolyBankruptcyFloor: Money = -5_000
+
+/// Сумма, которую игрок получает на счёт при выдаче кредита.
+let monopolyCreditPrincipal: Money = 5_000
+
+/// Сумма, которую игрок обязан вернуть в банк при погашении кредита (комиссия 500).
+let monopolyCreditRepayment: Money = 5_500

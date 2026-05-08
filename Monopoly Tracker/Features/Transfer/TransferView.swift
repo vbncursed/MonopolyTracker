@@ -5,7 +5,7 @@ import UIKit
 struct TransferView: View {
     @Environment(AppContainer.self) private var container
     @Query(
-        filter: #Predicate<Player> { $0.game?.endedAt == nil },
+        filter: #Predicate<Player> { $0.game?.endedAt == nil && $0.isBankrupt == false },
         sort: \Player.seatOrder
     )
     private var players: [Player]

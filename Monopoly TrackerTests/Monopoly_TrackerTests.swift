@@ -75,7 +75,8 @@ struct LedgerServiceTests {
         #expect(try service.balance(of: alice) == 1700)
     }
 
-    @Test func overdraftIsAllowed_balanceCanGoNegative() async throws {
+    @Test func goingNegative_withoutCredit_marksBankrupt() async throws {
+        // Без открытого кредита любой минус — банкротство.
         let service = try Self.makeService()
         let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 100)
         let alice = try #require(game.players.first(where: { $0.name == "A" }))
@@ -84,7 +85,53 @@ struct LedgerServiceTests {
         try service.record(amount: 500, kind: .transfer, from: alice, to: bob, note: nil)
 
         #expect(try service.balance(of: alice) == -400)
+        #expect(alice.isBankrupt, "Минус без кредита → банкрот")
         #expect(try service.balance(of: bob) == 600)
+    }
+
+    @Test func creditAllowsBalanceDownTo_neg5000_withoutBankruptcy() async throws {
+        // С открытым кредитом игрок может уйти в минус — но не глубже -5000.
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 100)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+        let bob = try #require(game.players.first(where: { $0.name == "B" }))
+
+        try service.takeCredit(alice)
+        // alice: 100 + 5000 = 5100
+        try service.record(amount: 10_000, kind: .transfer, from: alice, to: bob, note: nil)
+        // alice: 5100 - 10000 = -4900 (на 100 не доходит до пола -5000)
+
+        #expect(try service.balance(of: alice) == -4_900)
+        #expect(!alice.isBankrupt, "С кредитом -4900 ещё в пределах допустимого минуса")
+    }
+
+    @Test func belowMinus5000_withCredit_marksBankrupt() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 100)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+        let bob = try #require(game.players.first(where: { $0.name == "B" }))
+
+        try service.takeCredit(alice)
+        try service.record(amount: 10_500, kind: .transfer, from: alice, to: bob, note: nil)
+        // alice: 5100 - 10500 = -5400, ниже -5000 → банкрот
+
+        #expect(alice.isBankrupt)
+    }
+
+    @Test func repayingCreditIntoNegative_marksBankrupt() async throws {
+        // Возврат кредита может загнать в минус без кредита — мгновенный банкрот.
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 100)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+        let bob = try #require(game.players.first(where: { $0.name == "B" }))
+
+        try service.takeCredit(alice)              // 100 + 5000 = 5100
+        try service.record(amount: 5_000, kind: .transfer, from: alice, to: bob, note: nil)
+        // alice = 100, кредит висит
+        try service.repayCredit(alice)
+        // alice = 100 - 5500 = -5400, кредит сброшен → пол стал 0 → банкрот
+
+        #expect(alice.isBankrupt)
     }
 
     @Test func transfer_rejectsZeroAmount() async throws {
@@ -188,6 +235,86 @@ struct LedgerServiceTests {
 
         #expect(throws: LedgerError.cannotReverseOpening) {
             try service.reverseTransaction(opening)
+        }
+    }
+
+    @Test func takeCredit_addsPrincipalToBalance() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 1500)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+
+        try service.takeCredit(alice)
+
+        #expect(alice.hasOutstandingCredit)
+        #expect(try service.balance(of: alice) == 1500 + monopolyCreditPrincipal)
+    }
+
+    @Test func takeCredit_secondTimeFails() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 1500)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+
+        try service.takeCredit(alice)
+
+        #expect(throws: LedgerError.creditAlreadyOutstanding) {
+            try service.takeCredit(alice)
+        }
+    }
+
+    @Test func repayCredit_chargesInterest_andClearsFlag() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 1500)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+
+        try service.takeCredit(alice)
+        // 1500 + 5000 = 6500
+        try service.repayCredit(alice)
+        // 6500 - 5500 = 1000 (комиссия 500 ушла банку).
+
+        #expect(!alice.hasOutstandingCredit)
+        #expect(try service.balance(of: alice) == 1000)
+    }
+
+    @Test func repayCredit_withoutOutstandingFails() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 1500)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+
+        #expect(throws: LedgerError.noCreditOutstanding) {
+            try service.repayCredit(alice)
+        }
+    }
+
+    @Test func bankruptcyOnlyAffectsThePayer_notRecipient() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 100)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+        let bob = try #require(game.players.first(where: { $0.name == "B" }))
+
+        try service.record(amount: 6_000, kind: .transfer, from: alice, to: bob, note: nil)
+
+        #expect(alice.isBankrupt, "Плательщик ушёл в минус → банкрот")
+        #expect(!bob.isBankrupt, "Получатель остался платёжеспособным")
+    }
+
+    @Test func bankruptPlayer_cannotParticipateInTransfers() async throws {
+        let service = try Self.makeService()
+        let game = try service.startGame(playerNames: ["A", "B"], startingBalance: 100)
+        let alice = try #require(game.players.first(where: { $0.name == "A" }))
+        let bob = try #require(game.players.first(where: { $0.name == "B" }))
+
+        try service.record(amount: 6_000, kind: .transfer, from: alice, to: bob, note: nil)
+        #expect(alice.isBankrupt)
+
+        // Банкрот не может ни платить, ни получать.
+        #expect(throws: LedgerError.playerBankrupt) {
+            try service.record(amount: 50, kind: .transfer, from: alice, to: bob, note: nil)
+        }
+        #expect(throws: LedgerError.playerBankrupt) {
+            try service.record(amount: 50, kind: .transfer, from: bob, to: alice, note: nil)
+        }
+        #expect(throws: LedgerError.playerBankrupt) {
+            try service.takeCredit(alice)
         }
     }
 
