@@ -1,0 +1,17 @@
+# Xcode build artifacts
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+
+# Claude Code local tooling (skills, settings, transcripts)
+.claude/
+
+# Throwaway artifacts
+myview.png
