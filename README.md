@@ -70,14 +70,14 @@ xcodebuild -project "Monopoly Tracker.xcodeproj" -scheme "Monopoly Tracker" \
 
 | Метрика | Значение |
 |---|---|
-| Cold launch (`simctl launch` → return) | **247–357 мс** |
-| Physical footprint (idle, через 3 с) | **27.5 МБ** |
-| Peak footprint | 27.8 МБ |
-| Размер бандла | **3.3 МБ** (Assets.car — 2.0 МБ под три варианта иконки, бинарь — 1.3 МБ) |
-| Кодовая база | 1439 строк Swift |
-| Прогон 14 тестов (build + install + run) | 24 с |
+| Cold launch (`simctl launch` → return) | **305 мс** |
+| Physical footprint (idle, через 3 с) | **27.2 МБ** |
+| Peak footprint | 27.2 МБ |
+| Размер бандла | **3.4 МБ** (Assets.car — 2.0 МБ под три варианта иконки, бинарь — 1.4 МБ) |
+| Кодовая база | 1 526 строк Swift |
+| Прогон 14 тестов (build + install + run) | ~34 с |
 | Чистое выполнение тестов | ~0.6 с |
-| Самый быстрый / медленный тест | 19 мс / 62 мс |
+| Самый быстрый / медленный тест | 19 мс / 71 мс |
 
 ## Тесты
 
